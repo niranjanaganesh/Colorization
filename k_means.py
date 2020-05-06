@@ -13,63 +13,45 @@ K-Means Clustering Strategy from Lecture:
 class Classifier:
     def __init__(self, num_clusters):
         self.num_clusters = num_clusters
-        self.min_diff = 10
 
-    def fit(self, pixels):
-        clusters = [Cluster(center=p, pixels=[p]) for p in random.sample(pixels, self.num_clusters)]
-
-        while True:
-
-            plists = self.assign_points(clusters, pixels)
-            diff = 0
-
-            for i in range(self.num_clusters):
-                if not plists[i]:
-                    continue
-                old = clusters[i]
-                center = self.find_center(plists[i])
-                new = Cluster(center, plists[i])
-                clusters[i] = new
-                diff = max(diff, find_euclidean_distance(old.center, new.center))
-
-            if diff < self.min_diff:
-                break
-
-        return clusters
-
-    def assign_points(self, clusters, pixels):
-        plists = [[] for i in range(self.num_clusters)]
-
+    # Groups pixels based on central pixel
+    def group_pixels(self, clusters, pixels):
+        groupings = []
+        for i in range(self.num_clusters):
+            groupings.append([])
         for p in pixels:
-            smallest_distance = float('inf')
-
+            minimum_distance = float('inf')
             for i in range(self.num_clusters):
                 distance = find_euclidean_distance(p, clusters[i].center)
-                if distance < smallest_distance:
-                    smallest_distance = distance
+                if distance < minimum_distance:
+                    minimum_distance = distance
                     index = i
+            groupings[index].append(p)
 
-            plists[index].append(p)
+        return groupings
 
-        return plists
-
-    def find_center(self, pixels):
-        n_dim = len(pixels[0].coordinates)
-        vals = [0.0 for i in range(n_dim)]
+    # Returns central pixel of cluster
+    def find_central_pixel(self, pixels):
+        n = len(pixels[0].coordinates)
+        values = []
+        for i in range(n):
+            values.append(0)
         for p in pixels:
-            for i in range(n_dim):
-                vals[i] += p.coordinates[i]
-        coords = [(v / len(pixels)) for v in vals]
-        return Pixel(coords)
+            for i in range(n):
+                values[i] = values[i] + p.coordinates[i]
+        total_pixels = len(pixels)
+        central_pixel_values = []
+        for v in values:
+            central_pixel_values.append((v / total_pixels))
+        central_pixel = Pixel(central_pixel_values)
+        return central_pixel
 
 # Finds euclidean distance between non-central points and central point
 # Euclidean distance between points x and y = Sqrt(Sum for i = 1 to n of (yi - xi)^2)
 def find_euclidean_distance(x, y):
-    n_dim = len(x.coordinates)
-    #return np.sqrt(sum([(p.coordinates[i] - q.coordinates[i]) ** 2 for i in range(n_dim)]))
-    for i in range(n_dim):
+    n = len(x.coordinates)
+    for i in range(n):
         return np.sqrt(np.sum([(x.coordinates[i] - y.coordinates[i]) ** 2]))
-
 
 # Extracts pixels from image given in path
 def extract_pixels(num_images, path):
@@ -86,17 +68,30 @@ def extract_pixels(num_images, path):
             pixels.append(Pixel(color))
     return pixels
 
-# Don't need
-def rgb_to_hex(rgb):
-    return '#%s' % ''.join(('%02x' % p for p in rgb))
-
 # Finds n representative colors given filename
-def find_rep_colors(filename, n_colors=5):
-    pixels = extract_pixels(1, filename)
-    clusters = Classifier(num_clusters=n_colors).fit(pixels)
-    clusters.sort(key=lambda c: len(c.pixels), reverse=True)
-    rgb_values = [map(int, c.center.coordinates) for c in clusters]
-    #return list(map(rgb_to_hex, rgb_values))
+def find_rep_colors(filename, num_colors=5):
+    pixels = extract_pixels(1, filename) # Extract pixels
+    k_means_classifier = Classifier(num_colors) # Create classifier
+    # Find clusters
+    clusters = [Cluster(p, [p]) for p in random.sample(pixels, num_colors)]
+    while True:
+        dist = 0
+        groupings = k_means_classifier.group_pixels(clusters, pixels)
+        for i in range(num_colors):
+            if not groupings[i]:
+                continue
+            old_cluster = clusters[i]
+            center = k_means_classifier.find_central_pixel(groupings[i])
+            new_cluster = Cluster(center, groupings[i])
+            clusters[i] = new_cluster
+            dist = max(find_euclidean_distance(old_cluster.center, new_cluster.center), dist)
+
+        if dist < 10:
+            break
+    clusters.sort(key=lambda cluster: len(cluster.pixels), reverse=True)
+    rgb_values = []
+    for c in clusters:
+        rgb_values.append(map(int, c.center.coordinates))
     return list(rgb_values)
 
 # Represents a single pixel
@@ -112,7 +107,8 @@ class Cluster:
         self.center = center
         self.pixels = pixels
 
-colors = find_rep_colors('pup.jpg', n_colors=5)
+# Test
+colors = find_rep_colors('pup.jpg', 5)
 print(colors)
 
 
